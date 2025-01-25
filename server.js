@@ -8,8 +8,8 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
     cors: {
-        origin: 'https://msquare8992.github.io',
-        // origin: 'http://localhost:4200',
+        // origin: 'https://msquare8992.github.io',
+        origin: 'http://localhost:4200',
         methods: ['GET', 'POST'],
         allowedHeaders: ['content-type'],
         credentials: true
@@ -17,8 +17,8 @@ const io = socketIo(server, {
 });
 
 app.use(cors({
-    origin: 'https://msquare8992.github.io',
-    // origin: 'http://localhost:4200',
+    // origin: 'https://msquare8992.github.io',
+    origin: 'http://localhost:4200',
     methods: ['GET', 'POST'],
     allowedHeaders: ['content-type'],
     credentials: true
@@ -31,8 +31,8 @@ app.get('/', (req, res) => {
 io.on('connection', (socket) => {
     console.log('A user connected');
 
-    socket.on('chat message', (msg) => {
-        io.emit('chat message', msg);
+    socket.on('chat message', (data) => {
+        io.emit('chat message', data);
     });
 
     socket.on('disconnect', () => {
