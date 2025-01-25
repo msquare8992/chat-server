@@ -8,7 +8,7 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
     cors: {
-        origin: 'https://msquare8992.github.io/chat',
+        origin: 'https://msquare8992.github.io',
         methods: ['GET', 'POST'],
         allowedHeaders: ['content-type'],
         credentials: true
@@ -16,7 +16,7 @@ const io = socketIo(server, {
 });
 
 app.use(cors({
-    origin: 'https://msquare8992.github.io/chat',
+    origin: 'https://msquare8992.github.io',
     methods: ['GET', 'POST'],
     allowedHeaders: ['content-type'],
     credentials: true
