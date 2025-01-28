@@ -7,8 +7,10 @@ const app = express();
 const server = http.createServer(app);
 
 const dotenv = require('dotenv');
-const envFil = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
-dotenv.config({path: envFil});
+if (process.env.NODE_ENV !== 'production') {
+    const envFil = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
+    dotenv.config({path: envFil});
+}
 
 const io = socketIo(server, {
     cors: {
