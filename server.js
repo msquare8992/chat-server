@@ -6,10 +6,12 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
+let userList = {};
+
 const io = socketIo(server, {
     cors: {
-        origin: 'https://msquare8992.github.io',
-        // origin: 'http://localhost:4200',
+        // origin: 'https://msquare8992.github.io',
+        origin: 'http://localhost:4200',
         methods: ['GET', 'POST'],
         allowedHeaders: ['content-type'],
         credentials: true
@@ -29,14 +31,30 @@ app.get('/', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('A user connected');
+    socket.on('register', (sender) => {
+        userList[sender] = socket.id;
+    })
 
-    socket.on('chat message', (data) => {
-        io.emit('chat message', data);
+    socket.on('sendMessage', (data) => {
+        const { sender, receiver, message } = data;
+        if(userList[receiver]) {
+            io.to(userList[sender]).emit('receiveMessage', {sender, message});
+            io.to(userList[receiver]).emit('receiveMessage', {sender, message});
+        }
+        else {
+            console.log(`User ${ receiver } is not online`);
+            io.to(userList[sender]).emit('receiveMessage', {sender, message});
+        }
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected');
+        for(let username in userList) {
+            if(userList[username] === socket.id) {
+                delete userList[username];
+                console.log(`${username} disconnected`);
+                break;
+            }
+        }
     });
 });
 
