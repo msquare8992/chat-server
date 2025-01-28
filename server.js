@@ -10,8 +10,8 @@ let userList = {};
 
 const io = socketIo(server, {
     cors: {
-        // origin: 'https://msquare8992.github.io',
-        origin: 'http://localhost:4200',
+        origin: 'https://msquare8992.github.io',
+        // origin: 'http://localhost:4200',
         methods: ['GET', 'POST'],
         allowedHeaders: ['content-type'],
         credentials: true
@@ -38,12 +38,13 @@ io.on('connection', (socket) => {
     socket.on('sendMessage', (data) => {
         const { sender, receiver, message } = data;
         if(userList[receiver]) {
+            io.to(userList[sender]).emit('userStatus', {status: true});
             io.to(userList[sender]).emit('receiveMessage', {sender, message});
             io.to(userList[receiver]).emit('receiveMessage', {sender, message});
         }
         else {
             console.log(`User ${ receiver } is not online`);
-            io.to(userList[sender]).emit('receiveMessage', {sender, message});
+            io.to(userList[sender]).emit('userStatus', {status: false});
         }
     });
 
