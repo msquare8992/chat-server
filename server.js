@@ -6,10 +6,13 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
+const dotenv = require('dotenv');
+const envFil = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
+dotenv.config({path: envFil});
+
 const io = socketIo(server, {
     cors: {
-        origin: 'https://msquare8992.github.io',
-        // origin: 'http://localhost:4200',
+        origin: process.env.CORS_ORIGIN,
         methods: ['GET', 'POST'],
         allowedHeaders: ['content-type'],
         credentials: true
@@ -17,8 +20,7 @@ const io = socketIo(server, {
 });
 
 app.use(cors({
-    origin: 'https://msquare8992.github.io',
-    // origin: 'http://localhost:4200',
+    origin: 'process.env.CORS_ORIGIN',
     methods: ['GET', 'POST'],
     allowedHeaders: ['content-type'],
     credentials: true
