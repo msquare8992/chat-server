@@ -3,6 +3,9 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 
+const fs = require('fs');
+const path = require('path');
+
 const dotenv = require('dotenv');
 const { time } = require('console');
 if (process.env.NODE_ENV !== 'production') {
@@ -35,6 +38,14 @@ app.get('/', (req, res) => {
 
 let userList = {};
 let messages = [];
+const msgFilePath = path.join(__dirname, 'messages.json');
+
+if(fs.existsSync(msgFilePath)) {
+    const data = fs.readFileSync(msgFilePath, 'utf8');
+    if(data) {
+        messages = JSON.parse(data);
+    }
+}
 
 io.on('connection', (socket) => {
     socket.on('register', (username) => {
@@ -64,6 +75,8 @@ io.on('connection', (socket) => {
         const newMessage = {sender, receiver, message, time: new Date().toLocaleString()};
         messages.push(newMessage);
 
+        fs.writeFileSync(msgFilePath, JSON.stringify(messages, null, 2), 'utf8');
+
         if(userList[receiver]) {
             io.to(userList[sender]).emit('receiveMessage', newMessage);
             io.to(userList[receiver]).emit('receiveMessage', newMessage);
@@ -78,6 +91,7 @@ io.on('connection', (socket) => {
     socket.on('deleteAllMessages', (data) => {
         const { sender, receiver } = data;
         messages = messages.filter(message => message.sender !== sender && message.sender !== receiver);
+        fs.writeFileSync(msgFilePath, JSON.stringify(messages, null, 2), 'utf8');
         io.to(userList[sender]).emit('allMessages', []);
         io.to(userList[receiver]).emit('allMessages', []);
         console.log(`All messages deleted between ${sender} and ${receiver}`);
