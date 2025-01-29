@@ -3,14 +3,15 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 
-const app = express();
-const server = http.createServer(app);
-
 const dotenv = require('dotenv');
+const { time } = require('console');
 if (process.env.NODE_ENV !== 'production') {
     const envFil = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
     dotenv.config({path: envFil});
 }
+
+const app = express();
+const server = http.createServer(app);
 
 const io = socketIo(server, {
     cors: {
@@ -22,7 +23,7 @@ const io = socketIo(server, {
 });
 
 app.use(cors({
-    origin: 'process.env.CORS_ORIGIN',
+    origin: process.env.CORS_ORIGIN,
     methods: ['GET', 'POST'],
     allowedHeaders: ['content-type'],
     credentials: true
@@ -33,25 +34,53 @@ app.get('/', (req, res) => {
 });
 
 let userList = {};
+let messages = [];
 
 io.on('connection', (socket) => {
     socket.on('register', (username) => {
         userList[username] = socket.id;
         console.log(`User registered: ${username} with scoket id: ${socket.id}`);
-        for(let user in userList) {
-            io.emit('userStatus', {username: user, status: true});
+    });
+
+    socket.on('getUserStatus', (data) => {
+        const { sender, receiver } = data;
+        if(userList[sender] && userList[receiver]) {
+            const isSenderActive = {username: sender, status: userList[sender] ? true : false};
+            const isReceiverActive = {username: receiver, status: userList[receiver] ? true : false};
+            io.to(userList[sender]).emit('userStatus', isReceiverActive);
+            io.to(userList[receiver]).emit('userStatus', isSenderActive);
         }
-    })
+    });
+
+    socket.on('getAllMessages', (data) => {
+        const { sender, receiver } = data;
+        const filteredMessages = messages?.filter(message => message.sender === sender || message.receiver === sender);
+        io.to(userList[sender]).emit('allMessages', filteredMessages);
+        console.log(`All messages sent to ${sender}`);
+    });
 
     socket.on('sendMessage', (data) => {
         const { sender, receiver, message } = data;
+        const newMessage = {sender, receiver, message, time: new Date().toLocaleString()};
+        messages.push(newMessage);
+
         if(userList[receiver]) {
-            io.to(userList[sender]).emit('receiveMessage', {sender, message});
-            io.to(userList[receiver]).emit('receiveMessage', {sender, message});
+            io.to(userList[sender]).emit('receiveMessage', newMessage);
+            io.to(userList[receiver]).emit('receiveMessage', newMessage);
         }
         else {
-            io.to(userList[sender]).emit('receiveMessage', {sender, message});
+            io.to(userList[sender]).emit('receiveMessage', newMessage);
         }
+        console.log(`Message sent from ${sender} to ${receiver}`);
+        console.log(`Message sent from ${userList[sender]} to ${userList[receiver]}`);
+    });
+
+    socket.on('deleteAllMessages', (data) => {
+        const { sender, receiver } = data;
+        messages = messages.filter(message => message.sender !== sender && message.sender !== receiver);
+        io.to(userList[sender]).emit('allMessages', []);
+        io.to(userList[receiver]).emit('allMessages', []);
+        console.log(`All messages deleted between ${sender} and ${receiver}`);
     });
 
     socket.on('disconnect', () => {
