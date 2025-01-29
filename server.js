@@ -48,6 +48,24 @@ if(fs.existsSync(msgFilePath)) {
 }
 
 io.on('connection', (socket) => {
+    socket.on('offer', (data) => {
+        console.log("offer received: ", data);
+        const { sender, receiver, offer } = data;
+        io.to(userList[receiver]).emit('offer', offer);
+    });
+
+    socket.on('answer', (data) => {
+        console.log("answer received: ", data);
+        const { sender, receiver, answer } = data;
+        io.to(userList[receiver]).emit('answer', answer);
+    });
+
+    socket.on('ice-candidate', (data) => {
+        console.log("ice-candidate received: ", data);
+        const { sender, receiver, candidate } = data;
+        io.to(userList[receiver]).emit('ice-candidate', candidate);
+    });
+
     socket.on('register', (username) => {
         userList[username] = socket.id;
         console.log(`User registered: ${username} with scoket id: ${socket.id}`);
