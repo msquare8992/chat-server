@@ -57,7 +57,7 @@ io.on('connection', (socket) => {
     socket.on('answer', (data) => {
         console.log("answer received: ", data);
         const { sender, receiver, answer } = data;
-        io.to(userList[sender]).emit('answer', answer);
+        io.to(userList[receiver]).emit('answer', answer);
     });
 
     socket.on('ice-candidate', (data) => {
