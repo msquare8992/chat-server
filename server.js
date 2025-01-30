@@ -90,7 +90,7 @@ io.on('connection', (socket) => {
 
     socket.on('sendMessage', (data) => {
         const { sender, receiver, message } = data;
-        const newMessage = {sender, receiver, message, time: new Date().toLocaleString()};
+        const newMessage = {sender, receiver, message, time: new Date().getTime()};
         messages.push(newMessage);
 
         fs.writeFileSync(msgFilePath, JSON.stringify(messages, null, 2), 'utf8');
