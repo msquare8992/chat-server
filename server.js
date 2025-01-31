@@ -38,12 +38,22 @@ app.get('/', (req, res) => {
 
 let userList = {};
 let messages = [];
+let userStatus = [];
+
 const msgFilePath = path.join(__dirname, 'messages.json');
+const statusFilePath = path.join(__dirname, 'status.json');
 
 if(fs.existsSync(msgFilePath)) {
     const data = fs.readFileSync(msgFilePath, 'utf8');
     if(data) {
         messages = JSON.parse(data);
+    }
+}
+
+if(fs.existsSync(statusFilePath)) {
+    const data = fs.readFileSync(statusFilePath, 'utf8');
+    if(data) {
+        userStatus = JSON.parse(data);
     }
 }
 
@@ -74,17 +84,14 @@ io.on('connection', (socket) => {
 
     socket.on('register', (username) => {
         userList[username] = socket.id;
+        updateUserStatus(username);
         console.log(`User registered: ${username} with scoket id: ${socket.id}`);
     });
 
     socket.on('getUserStatus', (data) => {
         const { sender, receiver } = data;
-        if(userList[sender] && userList[receiver]) {
-            const isSenderActive = {username: sender, status: userList[sender] ? true : false};
-            const isReceiverActive = {username: receiver, status: userList[receiver] ? true : false};
-            io.to(userList[sender]).emit('userStatus', isReceiverActive);
-            io.to(userList[receiver]).emit('userStatus', isSenderActive);
-        }
+        io.to(userList[sender]).emit('userStatus', getUserStatus(receiver));
+        io.to(userList[receiver]).emit('userStatus', getUserStatus(sender));
     });
 
     socket.on('getAllMessages', (data) => {
@@ -125,7 +132,7 @@ io.on('connection', (socket) => {
         for(let username in userList) {
             if(userList[username] === socket.id) {
                 delete userList[username];
-                io.emit('userStatus', {username, status: false});
+                updateUserStatus(username);
                 console.log(`${username} disconnected and removed from userList`);
                 break;
             }
@@ -137,3 +144,23 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log('Server is running on port', PORT);
 });
+
+function getUserStatus(username) {
+    const index = userStatus.findIndex(user => user?.username === username);
+    return index > -1 ? userStatus[index] : {};
+}
+
+function updateUserStatus(username) {
+    const status = userList[username] ? true : false;
+    const statusDetails = {username, status, time: new Date().getTime()};
+    const index = userStatus.findIndex(user => user?.username === username);
+
+    if(index > -1) {
+        userStatus[index] = statusDetails;
+    }
+    else {
+        userStatus.push(statusDetails);
+    }
+
+    fs.writeFileSync(statusFilePath, JSON.stringify(userStatus, null, 2), 'utf8');
+}
