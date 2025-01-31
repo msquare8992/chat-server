@@ -8,9 +8,9 @@ const path = require('path');
 
 const dotenv = require('dotenv');
 const { time } = require('console');
+
 if (process.env.NODE_ENV !== 'production') {
-    const envFil = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
-    dotenv.config({path: envFil});
+    dotenv.config({path: '.env.development'});
 }
 
 const app = express();
@@ -64,6 +64,12 @@ io.on('connection', (socket) => {
         console.log("ice-candidate received: ", data);
         const { sender, receiver, candidate } = data;
         io.to(userList[receiver]).emit('ice-candidate', candidate);
+    });
+
+    socket.on('offer-end', data => {
+        console.log("offer-end received: ", data);
+        const { sender, receiver } = data;
+        io.to(userList[receiver]).emit('offer-end', data);
     });
 
     socket.on('register', (username) => {
