@@ -76,12 +76,6 @@ io.on('connection', (socket) => {
         io.to(userList[receiver]).emit('ice-candidate', candidate);
     });
 
-    socket.on('offer-end', data => {
-        console.log("offer-end received: ", data);
-        const { sender, receiver } = data;
-        io.to(userList[receiver]).emit('offer-end', data);
-    });
-
     socket.on('register', (username) => {
         userList[username] = socket.id;
         updateUserStatus(username);
