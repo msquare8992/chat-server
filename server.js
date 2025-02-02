@@ -1,34 +1,39 @@
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
 const cors = require('cors');
+const http = require('http');
+
+const express = require('express');
+const socketIo = require('socket.io');
+
+const jwt = require('jsonwebtoken');
+const bodyParser = require('body-parser');
+
 
 const fs = require('fs');
 const path = require('path');
-
 const dotenv = require('dotenv');
-const { time } = require('console');
+
+const app = express();
+const server = http.createServer(app);
 
 if (process.env.NODE_ENV !== 'production') {
     dotenv.config({path: '.env.development'});
 }
 
-const app = express();
-const server = http.createServer(app);
+const usersFilePath = path.join(__dirname, 'users.json');
+const msgFilePath = path.join(__dirname, 'messages.json');
+const statusFilePath = path.join(__dirname, 'status.json');
 
-const io = socketIo(server, {
-    cors: {
-        origin: process.env.CORS_ORIGIN,
-        methods: ['GET', 'POST'],
-        allowedHeaders: ['content-type'],
-        credentials: true
-    }
-});
+let users = readFiles(usersFilePath, []);
+let messages = readFiles(msgFilePath, []);
+let userStatus = readFiles(statusFilePath, {});
 
+let userList = {};
+
+app.use(bodyParser.json());
 app.use(cors({
     origin: process.env.CORS_ORIGIN,
     methods: ['GET', 'POST'],
-    allowedHeaders: ['content-type'],
+    allowedHeaders: ['content-type', 'Authorization'],
     credentials: true
 }));
 
@@ -36,46 +41,59 @@ app.get('/', (req, res) => {
   res.send('Welcome to Chat App Server');
 });
 
-let userList = {};
-let messages = [];
-let userStatus = [];
+app.post('/register', (req, res) => {
+    const { username, password, secret } = req.body;
+    const userExists = users?.some(user => user?.username === username);
 
-const msgFilePath = path.join(__dirname, 'messages.json');
-const statusFilePath = path.join(__dirname, 'status.json');
-
-if(fs.existsSync(msgFilePath)) {
-    const data = fs.readFileSync(msgFilePath, 'utf8');
-    if(data) {
-        messages = JSON.parse(data);
+    if(userExists) {
+        return res.status(400).json({ message: 'User already exists' });
     }
-}
 
-if(fs.existsSync(statusFilePath)) {
-    const data = fs.readFileSync(statusFilePath, 'utf8');
-    if(data) {
-        userStatus = JSON.parse(data);
+    users?.push({ username, password, secret });
+    console.log("users ::: ", users, username, password, secret);
+    fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+    return res.status(201).json({ message: 'User registered successfully' });
+});
+
+app.post('/login', (req, res) => {
+    const { username, password, secret } = req.body;
+    const user = users?.find(user => user?.username === username && user?.password === password && user?.secret === secret);
+
+    if(!user) {
+        res.status(401).json({ message: 'Invalid credentials' });
     }
-}
+
+    const token = jwt.sign({ username: user?.username }, user?.secret, { expiresIn: '1h' });
+    return res.status(201).json({ token, message: 'User login successfully' });
+});
+
+app.get('/auth', (req, res) => {
+    const secret = req.query.secret;
+    const token = req.headers['authorization'];
+
+    if(!token) {
+        return res.status(401).json({ message: 'No token provided' });
+    }
+
+    jwt.verify(token, secret, (err, user) => {
+        if(err) {
+            return res.status(401).json({ message: 'Invalid token' });
+        }
+
+        return res.status(201).json({ message: 'valid token', username: user?.username });
+    });
+});
+
+const io = socketIo(server, {
+    cors: {
+        origin: process.env.CORS_ORIGIN,
+        methods: ['GET', 'POST'],
+        allowedHeaders: ['content-type', 'Authorization'],
+        credentials: true
+    }
+});
 
 io.on('connection', (socket) => {
-    socket.on('offer', (data) => {
-        console.log("offer received: ", data);
-        const { sender, receiver, offer } = data;
-        io.to(userList[receiver]).emit('offer', offer);
-    });
-
-    socket.on('answer', (data) => {
-        console.log("answer received: ", data);
-        const { sender, receiver, answer } = data;
-        io.to(userList[receiver]).emit('answer', answer);
-    });
-
-    socket.on('ice-candidate', (data) => {
-        console.log("ice-candidate received: ", data);
-        const { sender, receiver, candidate } = data;
-        io.to(userList[receiver]).emit('ice-candidate', candidate);
-    });
-
     socket.on('register', (username) => {
         userList[username] = socket.id;
         updateUserStatus(username);
@@ -121,6 +139,24 @@ io.on('connection', (socket) => {
         io.to(userList[receiver]).emit('allMessages', []);
         console.log(`All messages deleted between ${sender} and ${receiver}`);
     });
+    
+    socket.on('offer', (data) => {
+        console.log("offer received: ", data);
+        const { sender, receiver, offer } = data;
+        io.to(userList[receiver]).emit('offer', offer);
+    });
+
+    socket.on('answer', (data) => {
+        console.log("answer received: ", data);
+        const { sender, receiver, answer } = data;
+        io.to(userList[receiver]).emit('answer', answer);
+    });
+
+    socket.on('ice-candidate', (data) => {
+        console.log("ice-candidate received: ", data);
+        const { sender, receiver, candidate } = data;
+        io.to(userList[receiver]).emit('ice-candidate', candidate);
+    });
 
     socket.on('disconnect', () => {
         for(let username in userList) {
@@ -138,6 +174,18 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log('Server is running on port', PORT);
 });
+
+function readFiles(filePath, emptyResponse) {
+    try {
+        if(fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            return data ? JSON.parse(data) : emptyResponse;
+        }
+    } catch(err) {
+        console.log("readFiles ::: error ::: ", err);
+    }
+    return emptyResponse;
+}
 
 function getUserStatus(username) {
     const index = userStatus.findIndex(user => user?.username === username);
