@@ -1,5 +1,4 @@
+config-dev/
 node_modules/
+.env.development
 package-lock.json
-users.json
-messages.json
-activeUsers.json

@@ -19,9 +19,9 @@ if (process.env.NODE_ENV !== 'production') {
     dotenv.config({path: '.env.development'});
 }
 
-const usersFilePath = path.join(__dirname, 'users.json');
-const msgFilePath = path.join(__dirname, 'messages.json');
-const activeUsersFilePath = path.join(__dirname, 'activeUsers.json');
+const usersFilePath = path.join(__dirname, 'config-dev', 'users.json');
+const msgFilePath = path.join(__dirname, 'config-dev', 'messages.json');
+const activeUsersFilePath = path.join(__dirname, 'config-dev', 'activeUsers.json');
 
 let users = readFiles(usersFilePath, []);
 let messages = readFiles(msgFilePath, []);
