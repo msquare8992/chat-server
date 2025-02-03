@@ -51,7 +51,7 @@ app.post('/register', (req, res) => {
 
     users?.push({ id: generateUniqueId(), socketId: '', username, password, secret });
     console.log("users ::: ", users, username, password, secret);
-    fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+    writeFiles(usersFilePath, users);
     return res.status(201).json({ message: 'Account created successfully! You can now log in.' });
 });
 
@@ -119,62 +119,35 @@ io.on('connection', (socket) => {
     });
 
     socket.on('getUserStatus', (data) => {
-        const activeFromUser = getActiveUser(null, data?.sender);
-        const activeToUser = getActiveUser(null, data?.receiver);
-
-        if(activeFromUser?.socketId && activeFromUser?.username) {
-            io.to(activeFromUser?.socketId).emit('userStatus', activeToUser);
-        }
-
-        if(activeToUser?.socketId && activeToUser?.username) {
-            io.to(activeToUser?.socketId).emit('userStatus', activeFromUser);
-        }
+        getUserStatus(data?.from, data?.to);
+        getUserStatus(data?.to, data?.from);
     });
 
     socket.on('getAllMessages', (data) => {
-        const activeUser = getActiveUser(null, data?.sender);
-        const filteredMessages = messages?.filter(message => message.sender === data?.sender || message.receiver === data?.sender);
-        if(activeUser?.socketId && activeUser?.username) {
-            io.to(activeUser?.socketId).emit('allMessages', filteredMessages);
-        }
-        console.log(`All messages sent to ${data?.sender}`);
+        sendAllMessages(data?.from, data?.to, 'allMessages');
+        console.log(`All messages sent to ${data?.from}`);
     });
 
     socket.on('sendMessage', (data) => {
-        const { sender, receiver, message } = data;
-        const newMessage = {sender, receiver, message, time: new Date().getTime()};
-        messages.push(newMessage);
-
-        fs.writeFileSync(msgFilePath, JSON.stringify(messages, null, 2), 'utf8');
-
-        const activeFromUser = getActiveUser(null, data?.sender);
-        const activeToUser = getActiveUser(null, data?.receiver);
-        [activeFromUser, activeToUser].forEach(activeUser => {
-            if(activeUser?.socketId && activeUser?.username) {
-                io.to(activeUser?.socketId).emit('receiveMessage', newMessage);
-            }
-        });
-        console.log(`Message sent from ${sender} to ${receiver}`);
+        const { from, to, message } = data;
+        const msg = {from, to, message, time: new Date().getTime()};
+        writeFiles(msgFilePath, messages.push(msg));
+        sendMessage(data?.from, msg, 'receiveMessage');
+        sendMessage(data?.to, msg, 'receiveMessage');
+        console.log(`Message sent from ${from} to ${to}`);
     });
 
     socket.on('deleteAllMessages', (data) => {
-        const { sender, receiver } = data;
-        messages = messages.filter(message => message.sender !== sender && message.sender !== receiver);
-        fs.writeFileSync(msgFilePath, JSON.stringify(messages, null, 2), 'utf8');
-        
-        const activeFromUser = getActiveUser(null, data?.sender);
-        const activeToUser = getActiveUser(null, data?.receiver);
-        [activeFromUser, activeToUser].forEach(activeUser => {
-            if(activeUser?.socketId && activeUser?.username) {
-                io.to(activeUser?.socketId).emit('allMessages', []);
-            }
-        });
-        console.log(`All messages deleted between ${sender} and ${receiver}`);
+        messages = messages.filter(message => !(message.from === data?.from && message.to === data?.to));
+        writeFiles(msgFilePath, messages);
+        sendAllMessages(data?.from, data?.to, 'receiveMessage');
+        sendAllMessages(data?.to, data?.from, 'receiveMessage');
+        console.log(`All messages deleted between ${data?.from} and ${data?.to}`);
     });
     
     socket.on('offer', (data) => {
         console.log("offer received: ", data);
-        const activeUser = getActiveUser(null, data?.receiver);
+        const activeUser = getActiveUser(null, data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('offer', data?.offer);
         }
@@ -182,7 +155,7 @@ io.on('connection', (socket) => {
 
     socket.on('answer', (data) => {
         console.log("answer received: ", data);
-        const activeUser = getActiveUser(null, data?.receiver);
+        const activeUser = getActiveUser(null, data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('answer', data?.answer);
         }
@@ -190,7 +163,7 @@ io.on('connection', (socket) => {
 
     socket.on('ice-candidate', (data) => {
         console.log("ice-candidate received: ", data);
-        const activeUser = getActiveUser(null, data?.receiver);
+        const activeUser = getActiveUser(null, data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('ice-candidate', data?.candidate);
         }
@@ -210,18 +183,19 @@ server.listen(PORT, () => {
 });
 
 function readFiles(filePath, emptyResponse) {
-    console.log("readFiles ::: ", filePath);
     try {
         if(fs.existsSync(filePath)) {
-            console.log("readFiles exists");
             const data = fs.readFileSync(filePath, 'utf8');
             return data ? JSON.parse(data) : emptyResponse;
         }
     } catch(err) {
         console.log("readFiles ::: error ::: ", err);
     }
-    console.log("readFiles not exists");
     return emptyResponse;
+}
+
+function writeFiles(filePath, response) {
+    fs.writeFileSync(filePath, JSON.stringify(response, null, 2), 'utf8');
 }
 
 function generateUniqueId() {
@@ -248,6 +222,24 @@ function updateActiveUser(socketId, username, isActive) {
     else {
         activeUsers.push(userDetails);
     }
+    writeFiles(activeUsersFilePath, activeUsers);
+}
 
-    fs.writeFileSync(activeUsersFilePath, JSON.stringify(activeUsers, null, 2), 'utf8');
+function getUserStatus(from, to) {
+    const fromUser = getActiveUser(null, from);
+    if (fromUser?.socketId && fromUser?.username) {
+        io.to(fromUser?.socketId).emit('userStatus', getActiveUser(null, to));
+    }
+}
+
+function sendMessage(name, msg, label) {
+    const activeUser = getActiveUser(null, name);
+    if (activeUser?.socketId && activeUser?.username) {
+        io.to(activeUser?.socketId).emit(label, msg);
+    }
+}
+
+function sendAllMessages(from, to, label) {
+    const allMessages = messages?.filter(message => ((message.from === from && message.to === to) || (message.from === to && message.to === from)));
+    sendMessage(from, allMessages, label);
 }
