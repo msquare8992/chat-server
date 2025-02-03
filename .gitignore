@@ -1,4 +1,5 @@
-users.json
-status.json
-messages.json
 node_modules/
+package-lock.json
+users.json
+messages.json
+activeUsers.json
