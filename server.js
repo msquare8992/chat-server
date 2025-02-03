@@ -15,7 +15,7 @@ const dotenv = require('dotenv');
 const app = express();
 const server = http.createServer(app);
 
-let configPath = 'config-prod';
+let configPath = 'config';
 if (process.env.NODE_ENV !== 'production') {
     configPath = 'config-dev';
     dotenv.config({path: '.env.development'});
