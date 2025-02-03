@@ -21,13 +21,11 @@ if (process.env.NODE_ENV !== 'production') {
 
 const usersFilePath = path.join(__dirname, 'users.json');
 const msgFilePath = path.join(__dirname, 'messages.json');
-const statusFilePath = path.join(__dirname, 'status.json');
+const activeUsersFilePath = path.join(__dirname, 'activeUsers.json');
 
 let users = readFiles(usersFilePath, []);
 let messages = readFiles(msgFilePath, []);
-let userStatus = readFiles(statusFilePath, {});
-
-let userList = {};
+let activeUsers = readFiles(activeUsersFilePath, []);
 
 app.use(bodyParser.json());
 app.use(cors({
@@ -46,13 +44,13 @@ app.post('/register', (req, res) => {
     const userExists = users?.some(user => user?.username === username);
 
     if(userExists) {
-        return res.status(400).json({ message: 'User already exists' });
+        return res.status(400).json({ message: 'The username is already in use. Please try another one.' });
     }
 
-    users?.push({ username, password, secret });
+    users?.push({ id: generateUniqueId(), socketId: '', username, password, secret });
     console.log("users ::: ", users, username, password, secret);
     fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
-    return res.status(201).json({ message: 'User registered successfully' });
+    return res.status(201).json({ message: 'Account created successfully! You can now log in.' });
 });
 
 app.post('/login', (req, res) => {
@@ -60,11 +58,13 @@ app.post('/login', (req, res) => {
     const user = users?.find(user => user?.username === username && user?.password === password && user?.secret === secret);
 
     if(!user) {
-        res.status(401).json({ message: 'Invalid credentials' });
+        res.status(401).json({ message: 'Invalid username or password. Please try again.' });
     }
 
-    const token = jwt.sign({ username: user?.username }, user?.secret, { expiresIn: '1h' });
-    return res.status(201).json({ token, message: 'User login successfully' });
+    const token = jwt.sign({ username: user?.username }, user?.secret, { expiresIn: '7d' });
+    return res.status(201).json({ message: 'You have logged in successfully', userInfo: {
+        id: user?.id, socketId: user?.socketId, username: user?.username, secret: user?.secret, token
+    } });
 });
 
 app.get('/auth', (req, res) => {
@@ -72,15 +72,32 @@ app.get('/auth', (req, res) => {
     const token = req.headers['authorization'];
 
     if(!token) {
-        return res.status(401).json({ message: 'No token provided' });
+        return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
     }
 
     jwt.verify(token, secret, (err, user) => {
         if(err) {
-            return res.status(401).json({ message: 'Invalid token' });
+            return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
         }
 
-        return res.status(201).json({ message: 'valid token', username: user?.username });
+        return res.status(201).json({ message: 'Authentication successful.', username: user?.username });
+    });
+});
+
+app.get('/users', (req, res) => {
+    const secret = req.query.secret;
+    const token = req.headers['authorization'];
+    if(!token) {
+        return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
+    }
+
+    jwt.verify(token, secret, (err, user) => {
+        if(err) {
+            return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
+        }
+
+        const userList = activeUsers?.filter(from => from?.username !== user?.username)?.map(user => ({ username: user?.username, status: user?.status, time: user?.time }));
+        return res.status(201).json({ message: 'Authentication successful.', users: userList ?? [] });
     });
 });
 
@@ -95,22 +112,30 @@ const io = socketIo(server, {
 
 io.on('connection', (socket) => {
     socket.on('register', (username) => {
-        userList[username] = socket.id;
-        updateUserStatus(username);
+        updateActiveUser(socket.id, username, true);
         console.log(`User registered: ${username} with scoket id: ${socket.id}`);
     });
 
     socket.on('getUserStatus', (data) => {
-        const { sender, receiver } = data;
-        io.to(userList[sender]).emit('userStatus', getUserStatus(receiver));
-        io.to(userList[receiver]).emit('userStatus', getUserStatus(sender));
+        const activeFromUser = getActiveUser(null, data?.sender);
+        const activeToUser = getActiveUser(null, data?.receiver);
+
+        if(activeFromUser?.socketId && activeFromUser?.username) {
+            io.to(activeFromUser?.socketId).emit('userStatus', activeToUser);
+        }
+
+        if(activeToUser?.socketId && activeToUser?.username) {
+            io.to(activeToUser?.socketId).emit('userStatus', activeFromUser);
+        }
     });
 
     socket.on('getAllMessages', (data) => {
-        const { sender, receiver } = data;
-        const filteredMessages = messages?.filter(message => message.sender === sender || message.receiver === sender);
-        io.to(userList[sender]).emit('allMessages', filteredMessages);
-        console.log(`All messages sent to ${sender}`);
+        const activeUser = getActiveUser(null, data?.sender);
+        const filteredMessages = messages?.filter(message => message.sender === data?.sender || message.receiver === data?.sender);
+        if(activeUser?.socketId && activeUser?.username) {
+            io.to(activeUser?.socketId).emit('allMessages', filteredMessages);
+        }
+        console.log(`All messages sent to ${data?.sender}`);
     });
 
     socket.on('sendMessage', (data) => {
@@ -120,52 +145,59 @@ io.on('connection', (socket) => {
 
         fs.writeFileSync(msgFilePath, JSON.stringify(messages, null, 2), 'utf8');
 
-        if(userList[receiver]) {
-            io.to(userList[sender]).emit('receiveMessage', newMessage);
-            io.to(userList[receiver]).emit('receiveMessage', newMessage);
-        }
-        else {
-            io.to(userList[sender]).emit('receiveMessage', newMessage);
-        }
+        const activeFromUser = getActiveUser(null, data?.sender);
+        const activeToUser = getActiveUser(null, data?.receiver);
+        [activeFromUser, activeToUser].forEach(activeUser => {
+            if(activeUser?.socketId && activeUser?.username) {
+                io.to(activeUser?.socketId).emit('receiveMessage', newMessage);
+            }
+        });
         console.log(`Message sent from ${sender} to ${receiver}`);
-        console.log(`Message sent from ${userList[sender]} to ${userList[receiver]}`);
     });
 
     socket.on('deleteAllMessages', (data) => {
         const { sender, receiver } = data;
         messages = messages.filter(message => message.sender !== sender && message.sender !== receiver);
         fs.writeFileSync(msgFilePath, JSON.stringify(messages, null, 2), 'utf8');
-        io.to(userList[sender]).emit('allMessages', []);
-        io.to(userList[receiver]).emit('allMessages', []);
+        
+        const activeFromUser = getActiveUser(null, data?.sender);
+        const activeToUser = getActiveUser(null, data?.receiver);
+        [activeFromUser, activeToUser].forEach(activeUser => {
+            if(activeUser?.socketId && activeUser?.username) {
+                io.to(activeUser?.socketId).emit('allMessages', []);
+            }
+        });
         console.log(`All messages deleted between ${sender} and ${receiver}`);
     });
     
     socket.on('offer', (data) => {
         console.log("offer received: ", data);
-        const { sender, receiver, offer } = data;
-        io.to(userList[receiver]).emit('offer', offer);
+        const activeUser = getActiveUser(null, data?.receiver);
+        if(activeUser?.socketId && activeUser?.username) {
+            io.to(activeUser?.socketId).emit('offer', data?.offer);
+        }
     });
 
     socket.on('answer', (data) => {
         console.log("answer received: ", data);
-        const { sender, receiver, answer } = data;
-        io.to(userList[receiver]).emit('answer', answer);
+        const activeUser = getActiveUser(null, data?.receiver);
+        if(activeUser?.socketId && activeUser?.username) {
+            io.to(activeUser?.socketId).emit('answer', data?.answer);
+        }
     });
 
     socket.on('ice-candidate', (data) => {
         console.log("ice-candidate received: ", data);
-        const { sender, receiver, candidate } = data;
-        io.to(userList[receiver]).emit('ice-candidate', candidate);
+        const activeUser = getActiveUser(null, data?.receiver);
+        if(activeUser?.socketId && activeUser?.username) {
+            io.to(activeUser?.socketId).emit('ice-candidate', data?.candidate);
+        }
     });
 
     socket.on('disconnect', () => {
-        for(let username in userList) {
-            if(userList[username] === socket.id) {
-                delete userList[username];
-                updateUserStatus(username);
-                console.log(`${username} disconnected and removed from userList`);
-                break;
-            }
+        const activeUser = getActiveUser(socket?.id, null);
+        if(activeUser?.socketId && activeUser?.username) {
+            updateActiveUser(activeUser?.socketId, activeUser?.username, false);
         }
     });
 });
@@ -176,33 +208,44 @@ server.listen(PORT, () => {
 });
 
 function readFiles(filePath, emptyResponse) {
+    console.log("readFiles ::: ", filePath);
     try {
         if(fs.existsSync(filePath)) {
+            console.log("readFiles exists");
             const data = fs.readFileSync(filePath, 'utf8');
             return data ? JSON.parse(data) : emptyResponse;
         }
     } catch(err) {
         console.log("readFiles ::: error ::: ", err);
     }
+    console.log("readFiles not exists");
     return emptyResponse;
 }
 
-function getUserStatus(username) {
-    const index = userStatus.findIndex(user => user?.username === username);
-    return index > -1 ? userStatus[index] : {};
+function generateUniqueId() {
+    const time = Date.now();
+    const random = Math.random().toString(36).substr(2, 9);
+    return `${time}-${random}`;
 }
 
-function updateUserStatus(username) {
-    const status = userList[username] ? true : false;
-    const statusDetails = {username, status, time: new Date().getTime()};
-    const index = userStatus.findIndex(user => user?.username === username);
+function getActiveUser(socketId, username) {
+    return activeUsers.find(user => user?.socketId === socketId || user?.username === username) ?? {};
+}
+
+function getActiveUserIndex(socketId, username) {
+    return activeUsers.findIndex(user => user?.socketId === socketId || user?.username === username);
+}
+
+function updateActiveUser(socketId, username, isActive) {
+    const index = getActiveUserIndex(socketId, username);
+    const userDetails = {socketId, username, status: isActive, time: new Date().getTime()};
 
     if(index > -1) {
-        userStatus[index] = statusDetails;
+        activeUsers[index] = userDetails;
     }
     else {
-        userStatus.push(statusDetails);
+        activeUsers.push(userDetails);
     }
 
-    fs.writeFileSync(statusFilePath, JSON.stringify(userStatus, null, 2), 'utf8');
+    fs.writeFileSync(activeUsersFilePath, JSON.stringify(activeUsers, null, 2), 'utf8');
 }
