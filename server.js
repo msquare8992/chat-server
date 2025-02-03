@@ -15,13 +15,15 @@ const dotenv = require('dotenv');
 const app = express();
 const server = http.createServer(app);
 
+let configPath = 'config-prod';
 if (process.env.NODE_ENV !== 'production') {
+    configPath = 'config-dev';
     dotenv.config({path: '.env.development'});
 }
 
-const usersFilePath = path.join(__dirname, 'config-dev', 'users.json');
-const msgFilePath = path.join(__dirname, 'config-dev', 'messages.json');
-const activeUsersFilePath = path.join(__dirname, 'config-dev', 'activeUsers.json');
+const usersFilePath = path.join(__dirname, configPath, 'users.json');
+const msgFilePath = path.join(__dirname, configPath, 'messages.json');
+const activeUsersFilePath = path.join(__dirname, configPath, 'activeUsers.json');
 
 let users = readFiles(usersFilePath, []);
 let messages = readFiles(msgFilePath, []);
