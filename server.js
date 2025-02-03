@@ -63,6 +63,7 @@ app.post('/login', (req, res) => {
         res.status(401).json({ message: 'Invalid username or password. Please try again.' });
     }
 
+    updateActiveUser('', user?.username, false);
     const token = jwt.sign({ username: user?.username }, user?.secret, { expiresIn: '7d' });
     return res.status(201).json({ message: 'You have logged in successfully', userInfo: {
         id: user?.id, socketId: user?.socketId, username: user?.username, secret: user?.secret, token
@@ -217,6 +218,7 @@ function updateActiveUser(socketId, username, isActive) {
     const userDetails = {socketId, username, status: isActive, time: new Date().getTime()};
 
     if(index > -1) {
+        userDetails.socketId = userDetails.socketId ?? activeUsers[index]?.socketId;
         activeUsers[index] = userDetails;
     }
     else {
