@@ -60,13 +60,13 @@ app.post('/login', (req, res) => {
     const user = users?.find(user => user?.username === username && user?.password === password && user?.secret === secret);
 
     if(!user) {
-        res.status(401).json({ message: 'Invalid username or password. Please try again.' });
+        return res.status(401).json({ message: 'Invalid username or password. Please try again.' });
     }
 
-    updateActiveUser('', user?.username, false);
+    updateActiveUser('', user?.username, false, '');
     const token = jwt.sign({ username: user?.username }, user?.secret, { expiresIn: '7d' });
     return res.status(201).json({ message: 'You have logged in successfully', userInfo: {
-        id: user?.id, socketId: user?.socketId, username: user?.username, secret: user?.secret, token
+        id: user?.id, username: user?.username, secret: user?.secret, token
     } });
 });
 
@@ -115,7 +115,7 @@ const io = socketIo(server, {
 
 io.on('connection', (socket) => {
     socket.on('register', (username) => {
-        updateActiveUser(socket.id, username, true);
+        updateActiveUser(socket.id, username, true, new Date().getTime());
         console.log(`User registered: ${username} with scoket id: ${socket.id}`);
     });
 
@@ -148,7 +148,7 @@ io.on('connection', (socket) => {
     
     socket.on('offer', (data) => {
         console.log("offer received: ", data);
-        const activeUser = getActiveUser(null, data?.to);
+        const activeUser = getActiveUser(data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('offer', data?.offer);
         }
@@ -156,7 +156,7 @@ io.on('connection', (socket) => {
 
     socket.on('answer', (data) => {
         console.log("answer received: ", data);
-        const activeUser = getActiveUser(null, data?.to);
+        const activeUser = getActiveUser(data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('answer', data?.answer);
         }
@@ -164,16 +164,19 @@ io.on('connection', (socket) => {
 
     socket.on('ice-candidate', (data) => {
         console.log("ice-candidate received: ", data);
-        const activeUser = getActiveUser(null, data?.to);
+        const activeUser = getActiveUser(data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('ice-candidate', data?.candidate);
         }
     });
 
     socket.on('disconnect', () => {
-        const activeUser = getActiveUser(socket?.id, null);
-        if(activeUser?.socketId && activeUser?.username) {
-            updateActiveUser(activeUser?.socketId, activeUser?.username, false);
+        if(socket?.id) {
+            getActiveUserBySocketId()
+            const activeUser = getActiveUserBySocketId(socket?.id);
+            if(activeUser?.socketId && activeUser?.username) {
+                updateActiveUser('', activeUser?.username, false, new Date().getTime());
+            }
         }
     });
 });
@@ -205,20 +208,23 @@ function generateUniqueId() {
     return `${time}-${random}`;
 }
 
-function getActiveUser(socketId, username) {
-    return activeUsers.find(user => user?.socketId === socketId || user?.username === username) ?? {};
+function getActiveUser(username) {
+    return activeUsers.find(user => user?.username === username) ?? {};
 }
 
-function getActiveUserIndex(socketId, username) {
-    return activeUsers.findIndex(user => user?.socketId === socketId || user?.username === username);
+function getActiveUserIndex(username) {
+    return activeUsers.findIndex(user => user?.username === username);
 }
 
-function updateActiveUser(socketId, username, isActive) {
-    const index = getActiveUserIndex(socketId, username);
-    const userDetails = {socketId, username, status: isActive, time: new Date().getTime()};
+function getActiveUserBySocketId(socketId) {
+    return activeUsers.find(user => user?.socketId === socketId) ?? {};
+}
+
+function updateActiveUser(socketId, username, isActive, time) {
+    const index = getActiveUserIndex(username);
+    const userDetails = {socketId, username, status: isActive, time};
 
     if(index > -1) {
-        userDetails.socketId = userDetails.socketId ?? activeUsers[index]?.socketId;
         activeUsers[index] = userDetails;
     }
     else {
@@ -228,14 +234,14 @@ function updateActiveUser(socketId, username, isActive) {
 }
 
 function getUserStatus(from, to) {
-    const fromUser = getActiveUser(null, from);
+    const fromUser = getActiveUser(from);
     if (fromUser?.socketId && fromUser?.username) {
-        io.to(fromUser?.socketId).emit('userStatus', getActiveUser(null, to));
+        io.to(fromUser?.socketId).emit('userStatus', getActiveUser(to));
     }
 }
 
 function sendMessage(name, msg, label) {
-    const activeUser = getActiveUser(null, name);
+    const activeUser = getActiveUser(name);
     if (activeUser?.socketId && activeUser?.username) {
         io.to(activeUser?.socketId).emit(label, msg);
     }
