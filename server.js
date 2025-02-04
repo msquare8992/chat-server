@@ -25,6 +25,7 @@ const usersFilePath = path.join(__dirname, configPath, 'users.json');
 const msgFilePath = path.join(__dirname, configPath, 'messages.json');
 const activeUsersFilePath = path.join(__dirname, configPath, 'activeUsers.json');
 
+let jwtsecret = 'Render-India-Test';
 let users = readFiles(usersFilePath, []);
 let messages = readFiles(msgFilePath, []);
 let activeUsers = readFiles(activeUsersFilePath, []);
@@ -42,43 +43,42 @@ app.get('/', (req, res) => {
 });
 
 app.post('/register', (req, res) => {
-    const { username, password, secret } = req.body;
+    const { username, password } = req.body;
     const userExists = users?.some(user => user?.username === username);
 
     if(userExists) {
         return res.status(400).json({ message: 'The username is already in use. Please try another one.' });
     }
 
-    users?.push({ id: generateUniqueId(), socketId: '', username, password, secret });
-    console.log("users ::: ", users, username, password, secret);
+    users?.push({ id: generateUniqueId(), socketId: '', username, password });
+    console.log("users ::: ", users, username, password);
     writeFiles(usersFilePath, users);
     return res.status(201).json({ message: 'Account created successfully! You can now log in.' });
 });
 
 app.post('/login', (req, res) => {
-    const { username, password, secret } = req.body;
-    const user = users?.find(user => user?.username === username && user?.password === password && user?.secret === secret);
+    const { username, password } = req.body;
+    const user = users?.find(user => user?.username === username && user?.password === password);
 
     if(!user) {
         return res.status(401).json({ message: 'Invalid username or password. Please try again.' });
     }
 
     updateActiveUser('', user?.username, false, '');
-    const token = jwt.sign({ username: user?.username }, user?.secret, { expiresIn: '7d' });
+    const token = jwt.sign({ username: user?.username }, jwtsecret, { expiresIn: '7d' });
     return res.status(201).json({ message: 'You have logged in successfully', userInfo: {
-        id: user?.id, username: user?.username, secret: user?.secret, token
+        id: user?.id, username: user?.username, token
     } });
 });
 
 app.get('/auth', (req, res) => {
-    const secret = req.query.secret;
     const token = req.headers['authorization'];
 
     if(!token) {
         return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
     }
 
-    jwt.verify(token, secret, (err, user) => {
+    jwt.verify(token, jwtsecret, (err, user) => {
         if(err) {
             return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
         }
@@ -88,13 +88,12 @@ app.get('/auth', (req, res) => {
 });
 
 app.get('/users', (req, res) => {
-    const secret = req.query.secret;
     const token = req.headers['authorization'];
     if(!token) {
         return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
     }
 
-    jwt.verify(token, secret, (err, user) => {
+    jwt.verify(token, jwtsecret, (err, user) => {
         if(err) {
             return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
         }
@@ -132,7 +131,8 @@ io.on('connection', (socket) => {
     socket.on('sendMessage', (data) => {
         const { from, to, message } = data;
         const msg = {from, to, message, time: new Date().getTime()};
-        writeFiles(msgFilePath, messages.push(msg));
+        messages.push(msg);
+        writeFiles(msgFilePath, messages);
         sendMessage(data?.from, msg, 'receiveMessage');
         sendMessage(data?.to, msg, 'receiveMessage');
         console.log(`Message sent from ${from} to ${to}`);
