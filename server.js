@@ -173,8 +173,8 @@ io.on('connection', (socket) => {
     socket.on('deleteAllMessages', (data) => {
         messages = messages.filter(message => !(message.from === data?.from && message.to === data?.to));
         writeFiles(msgFilePath, messages);
-        sendAllMessages(data?.from, data?.to, 'receiveMessage');
-        sendAllMessages(data?.to, data?.from, 'receiveMessage');
+        sendAllMessages(data?.from, data?.to, 'allMessages');
+        sendAllMessages(data?.to, data?.from, 'allMessages');
     });
     
     socket.on('offer', (data) => {
