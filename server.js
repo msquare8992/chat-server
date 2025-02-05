@@ -124,7 +124,6 @@ const io = socketIo(server, {
 io.on('connection', (socket) => {
     socket.on('register', (username) => {
         updateActiveUser(socket.id, username, true, new Date().getTime());
-        console.log(`User registered: ${username} with scoket id: ${socket.id}`);
     });
 
     socket.on('getUserStatus', (data) => {
@@ -134,7 +133,6 @@ io.on('connection', (socket) => {
 
     socket.on('getAllMessages', (data) => {
         sendAllMessages(data?.from, data?.to, 'allMessages');
-        console.log(`All messages sent to ${data?.from}`);
     });
 
     socket.on('sendMessage', (data) => {
@@ -144,7 +142,32 @@ io.on('connection', (socket) => {
         writeFiles(msgFilePath, messages);
         sendMessage(data?.from, msg, 'receiveMessage');
         sendMessage(data?.to, msg, 'receiveMessage');
-        console.log(`Message sent from ${from} to ${to}`);
+    });
+
+    socket.on('editMessage', (data) => {
+        const { from, to, message, time } = data;
+        const msgIndex = messages?.filter(msg => msg.from === from && msg.to === to && msg.time === time);
+        if(msgIndex > -1) {
+            messages[msgIndex].message = message;
+            sendMessage(data?.from, {data, isEdited: true}, 'messageEdited');
+            sendMessage(data?.to, {data, isEdited: true}, 'messageEdited');
+        }
+        else {
+            sendMessage(data?.from, {data, isEdited: false}, 'messageEdited');
+        }
+    });
+
+    socket.on('deleteMessage', (data) => {
+        const { from, to, time } = data;
+        const msgIndex = messages?.filter(msg => msg.from === from && msg.to === to && msg.time === time);
+        if(msgIndex > -1) {
+            messages?.splice(msgIndex, 1);
+            sendMessage(data?.from, {data, isDeleted: true}, 'messageDeleted');
+            sendMessage(data?.to, {data, isDeleted: true}, 'messageDeleted');
+        }
+        else {
+            sendMessage(data?.from, {data, isDeleted: true}, 'messageDeleted');
+        }
     });
 
     socket.on('deleteAllMessages', (data) => {
@@ -152,11 +175,9 @@ io.on('connection', (socket) => {
         writeFiles(msgFilePath, messages);
         sendAllMessages(data?.from, data?.to, 'receiveMessage');
         sendAllMessages(data?.to, data?.from, 'receiveMessage');
-        console.log(`All messages deleted between ${data?.from} and ${data?.to}`);
     });
     
     socket.on('offer', (data) => {
-        console.log("offer received: ", data);
         const activeUser = getActiveUser(data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('offer', data?.offer);
@@ -164,7 +185,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('answer', (data) => {
-        console.log("answer received: ", data);
         const activeUser = getActiveUser(data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('answer', data?.answer);
@@ -172,7 +192,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('ice-candidate', (data) => {
-        console.log("ice-candidate received: ", data);
         const activeUser = getActiveUser(data?.to);
         if(activeUser?.socketId && activeUser?.username) {
             io.to(activeUser?.socketId).emit('ice-candidate', data?.candidate);
