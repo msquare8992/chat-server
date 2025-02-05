@@ -51,8 +51,8 @@ app.post('/register', (req, res) => {
     }
 
     users?.push({ id: generateUniqueId(), socketId: '', username, password });
-    console.log("users ::: ", users, username, password);
     writeFiles(usersFilePath, users);
+    updateActiveUser('', username, false, '');
     return res.status(201).json({ message: 'Account created successfully! You can now log in.' });
 });
 
