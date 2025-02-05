@@ -5,6 +5,7 @@ const express = require('express');
 const socketIo = require('socket.io');
 
 const jwt = require('jsonwebtoken');
+const CryptoJS = require('crypto-js');
 const bodyParser = require('body-parser');
 
 
@@ -25,7 +26,6 @@ const usersFilePath = path.join(__dirname, configPath, 'users.json');
 const msgFilePath = path.join(__dirname, configPath, 'messages.json');
 const activeUsersFilePath = path.join(__dirname, configPath, 'activeUsers.json');
 
-let jwtsecret = 'Render-India-Test';
 let users = readFiles(usersFilePath, []);
 let messages = readFiles(msgFilePath, []);
 let activeUsers = readFiles(activeUsersFilePath, []);
@@ -57,15 +57,24 @@ app.post('/register', (req, res) => {
 });
 
 app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = users?.find(user => user?.username === username && user?.password === password);
+    const { username, password, secret } = req.body;
+    
+    const user = users?.find(user => {
+        if(user?.username === username) {
+            const bytes = CryptoJS.AES.decrypt(user?.password, secret);
+            const decryptedPassword = bytes.toString(CryptoJS.enc.Utf8);
+            if(decryptedPassword === password) {
+                return user;
+            }
+        }
+    });
 
     if(!user) {
         return res.status(401).json({ message: 'Invalid username or password. Please try again.' });
     }
 
     updateActiveUser('', user?.username, false, '');
-    const token = jwt.sign({ username: user?.username }, jwtsecret, { expiresIn: '7d' });
+    const token = jwt.sign({ username: user?.username }, secret , { expiresIn: '7d' });
     return res.status(201).json({ message: 'You have logged in successfully', userInfo: {
         id: user?.id, username: user?.username, token
     } });
@@ -78,7 +87,7 @@ app.get('/auth', (req, res) => {
         return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
     }
 
-    jwt.verify(token, jwtsecret, (err, user) => {
+    jwt.verify(token, req.query.secret, (err, user) => {
         if(err) {
             return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
         }
@@ -93,7 +102,7 @@ app.get('/users', (req, res) => {
         return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
     }
 
-    jwt.verify(token, jwtsecret, (err, user) => {
+    jwt.verify(token, req.query.secret, (err, user) => {
         if(err) {
             return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
         }
