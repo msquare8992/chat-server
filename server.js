@@ -12,6 +12,7 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+const { exec } = require('child_process');
 
 const app = express();
 const server = http.createServer(app);
@@ -142,6 +143,7 @@ io.on('connection', (socket) => {
         writeFiles(msgFilePath, messages);
         sendMessage(data?.from, msg, 'receiveMessage');
         sendMessage(data?.to, msg, 'receiveMessage');
+        updateGitMessages();
     });
 
     socket.on('editMessage', (data) => {
@@ -250,7 +252,7 @@ function getActiveUserBySocketId(socketId) {
 
 function updateActiveUser(socketId, username, isActive, time) {
     const index = getActiveUserIndex(username);
-    const userDetails = {socketId, username, status: isActive, time};
+    const userDetails = { socketId, username, status: isActive, time };
 
     if(index > -1) {
         activeUsers[index] = userDetails;
@@ -278,4 +280,22 @@ function sendMessage(name, msg, label) {
 function sendAllMessages(from, to, label) {
     const allMessages = messages?.filter(message => ((message.from === from && message.to === to) || (message.from === to && message.to === from)));
     sendMessage(from, allMessages, label);
+}
+
+function updateGitMessages() {
+    try {
+        console.error(`updateGitMessages init`);
+        if(process.env.NODE_ENV !== 'development') {
+            exec('git add config/message.json && git commit -m "Update message.json" && git push origin master', (error, stdout, stderr) => {
+                if(error) {
+                    console.error(`exec error: ${error}`);
+                }
+                console.log(`stdout: ${stdout}`);
+                console.error(`stderr: ${stderr}`);
+            });
+        }
+        console.error(`updateGitMessages end`);
+    } catch(err) {
+        console.error(`updateGitMessages err: ${err}`);
+    }
 }
