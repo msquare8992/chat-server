@@ -143,7 +143,6 @@ io.on('connection', (socket) => {
         writeFiles(msgFilePath, messages);
         sendMessage(data?.from, msg, 'receiveMessage');
         sendMessage(data?.to, msg, 'receiveMessage');
-        updateGitMessages();
     });
 
     socket.on('editMessage', (data) => {
@@ -280,22 +279,4 @@ function sendMessage(name, msg, label) {
 function sendAllMessages(from, to, label) {
     const allMessages = messages?.filter(message => ((message.from === from && message.to === to) || (message.from === to && message.to === from)));
     sendMessage(from, allMessages, label);
-}
-
-function updateGitMessages() {
-    try {
-        console.error(`updateGitMessages init`);
-        if(process.env.NODE_ENV !== 'development') {
-            exec('git add config/messages.json && git commit -m "Update messages.json" && git push origin master', (error, stdout, stderr) => {
-                if(error) {
-                    console.error(`exec error: ${error}`);
-                }
-                console.log(`stdout: ${stdout}`);
-                console.error(`stderr: ${stderr}`);
-            });
-        }
-        console.error(`updateGitMessages end`);
-    } catch(err) {
-        console.error(`updateGitMessages err: ${err}`);
-    }
 }
