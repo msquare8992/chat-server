@@ -286,7 +286,7 @@ function updateGitMessages() {
     try {
         console.error(`updateGitMessages init`);
         if(process.env.NODE_ENV !== 'development') {
-            exec('git add config/messages.json && git commit -m "Update message.json" && git push origin master', (error, stdout, stderr) => {
+            exec('git add config/messages.json && git commit -m "Update messages.json" && git push origin master', (error, stdout, stderr) => {
                 if(error) {
                     console.error(`exec error: ${error}`);
                 }
