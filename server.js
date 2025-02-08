@@ -108,8 +108,26 @@ app.get('/users', (req, res) => {
             return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
         }
 
-        const userList = activeUsers?.filter(from => from?.username !== user?.username)?.map(user => ({ username: user?.username, status: user?.status, time: user?.time }));
-        return res.status(201).json({ message: 'Authentication successful.', users: userList ?? [] });
+        return res.status(201).json({ message: 'Authentication successful.', users: activeUsers ?? [] });
+    });
+});
+
+app.post('/syncActiveUsers', (req, res) => {
+    const token = req.headers['authorization'];
+    if(!token) {
+        return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
+    }
+
+    jwt.verify(token, req.query.secret, (err, user) => {
+        if(err) {
+            return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
+        }
+
+        let localActiveUsers = req.body.activeUsers || [];
+        localActiveUsers = activeUsers?.length > 0 ? localActiveUsers?.filter(lau => !activeUsers?.some(au => au?.username === lau?.username)) : localActiveUsers;
+        activeUsers = [...activeUsers, ...localActiveUsers];
+        writeFiles(activeUsersFilePath, activeUsers);
+        return res.status(201).json({ message: 'active user updated', isUpdated: true });
     });
 });
 
@@ -195,6 +213,11 @@ io.on('connection', (socket) => {
         writeFiles(msgFilePath, messages);
         sendAllMessages(data?.from, data?.to, 'deletedAllMessages');
         sendAllMessages(data?.to, data?.from, 'deletedAllMessages');
+    });
+
+    socket.on('typing', (data) => {
+        const activeUser = getActiveUser(data?.to);
+        io.to(activeUser?.socketId).emit('typing', data);
     });
     
     socket.on('offer', (data) => {
