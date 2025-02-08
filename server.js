@@ -51,7 +51,7 @@ app.post('/register', (req, res) => {
         return res.status(400).json({ message: 'The username is already in use. Please try another one.' });
     }
 
-    users?.push({ id: generateUniqueId(), socketId: '', username, password });
+    users?.push({ id: generateUniqueId('user-'), socketId: '', username, password });
     writeFiles(usersFilePath, users);
     updateActiveUser('', username, false, '');
     return res.status(201).json({ message: 'Account created successfully! You can now log in.' });
@@ -113,6 +113,25 @@ app.get('/users', (req, res) => {
     });
 });
 
+app.post('/syncMessages', (req, res) => {
+    const token = req.headers['authorization'];
+    if(!token) {
+        return res.status(401).json({ message: 'Authentication token missing. Please log in again.' });
+    }
+
+    jwt.verify(token, req.query.secret, (err, user) => {
+        if(err) {
+            return res.status(401).json({ message: 'Invalid authentication token. Please sign in to continue.' });
+        }
+
+        let localMessges = req.body.messages || [];
+        localMessges = messages?.length > 0 ? localMessges?.filter(localMsg => !messages?.some(msg => msg?.id === localMsg?.id)) : localMessges;
+        messages = [...messages, ...localMessges];
+        writeFiles(msgFilePath, messages);
+        return res.status(201).json({ message: 'messages updated', isUpdated: true });
+    });
+});
+
 const io = socketIo(server, {
     cors: {
         origin: process.env.CORS_ORIGIN,
@@ -138,7 +157,7 @@ io.on('connection', (socket) => {
 
     socket.on('sendMessage', (data) => {
         const { from, to, message } = data;
-        const msg = {from, to, message, time: new Date().getTime()};
+        const msg = { from, to, message, time: new Date().getTime(), id: generateUniqueId('messgae-') };
         messages.push(msg);
         writeFiles(msgFilePath, messages);
         sendMessage(data?.from, msg, 'receiveMessage');
@@ -174,8 +193,8 @@ io.on('connection', (socket) => {
     socket.on('deleteAllMessages', (data) => {
         messages = messages.filter(message => !(message.from === data?.from && message.to === data?.to));
         writeFiles(msgFilePath, messages);
-        sendAllMessages(data?.from, data?.to, 'allMessages');
-        sendAllMessages(data?.to, data?.from, 'allMessages');
+        sendAllMessages(data?.from, data?.to, 'deletedAllMessages');
+        sendAllMessages(data?.to, data?.from, 'deletedAllMessages');
     });
     
     socket.on('offer', (data) => {
@@ -231,10 +250,10 @@ function writeFiles(filePath, response) {
     fs.writeFileSync(filePath, JSON.stringify(response, null, 2), 'utf8');
 }
 
-function generateUniqueId() {
+function generateUniqueId(prefix) {
     const time = Date.now();
     const random = Math.random().toString(36).substr(2, 9);
-    return `${time}-${random}`;
+    return `${prefix}${time}-${random}`;
 }
 
 function getActiveUser(username) {
