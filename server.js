@@ -124,8 +124,7 @@ app.post('/syncActiveUsers', (req, res) => {
         }
 
         let localActiveUsers = req.body.activeUsers || [];
-        localActiveUsers = activeUsers?.length > 0 ? localActiveUsers?.filter(lau => !activeUsers?.some(au => au?.username === lau?.username)) : localActiveUsers;
-        activeUsers = [...activeUsers, ...localActiveUsers];
+        activeUsers = [...localActiveUsers, ...activeUsers?.filter(au => !localActiveUsers?.some(lau => lau?.username === au?.username))];
         writeFiles(activeUsersFilePath, activeUsers);
         return res.status(201).json({ message: 'active user updated', isUpdated: true });
     });
