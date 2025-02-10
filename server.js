@@ -219,6 +219,20 @@ io.on('connection', (socket) => {
         io.to(activeUser?.socketId).emit('typing', data);
     });
     
+    socket.on('callRequest', (data) => {
+        const activeUser = getActiveUser(data?.to);
+        if(activeUser?.socketId && activeUser?.username) {
+            io.to(activeUser?.socketId).emit('callRequest', data);
+        }
+    });
+    
+    socket.on('callAccept', (data) => {
+        const activeUser = getActiveUser(data?.to);
+        if(activeUser?.socketId && activeUser?.username) {
+            io.to(activeUser?.socketId).emit('callAccept', data);
+        }
+    });
+    
     socket.on('offer', (data) => {
         const activeUser = getActiveUser(data?.to);
         if(activeUser?.socketId && activeUser?.username) {
@@ -241,7 +255,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('closeVideoCall', (data) => {
-        console.log("closeVideoCall :::: data ::: ", data);
         sendMessage(data?.from, data, 'closeVideoCall');
         sendMessage(data?.to, data, 'closeVideoCall');
     });
