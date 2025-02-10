@@ -240,6 +240,12 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('closeVideoCall', (data) => {
+        console.log("closeVideoCall :::: data ::: ", data);
+        sendMessage(data?.from, data, 'closeVideoCall');
+        sendMessage(data?.to, data, 'closeVideoCall');
+    });
+
     socket.on('disconnect', () => {
         if(socket?.id) {
             getActiveUserBySocketId()
